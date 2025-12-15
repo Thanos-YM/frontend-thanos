@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useLayoutEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
 
   const resetForm = () => {
     setEmail('');
@@ -30,14 +31,14 @@ export default function Auth() {
     setError(null);
 
     const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      email,
+      password,
     });
 
     if (error) {
-        setError(error.message);
+      setError(error.message);
     } else {
-        navigate('/main');
+      navigate('/main');
     }
     setLoading(false);
   };
@@ -72,15 +73,40 @@ export default function Auth() {
     setLoading(false);
   };
 
-  useEffect(() => {
-  const checkSession = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      navigate('/main');
-    }
-  };
-  checkSession();
-}, [navigate]);
+  // 렌더링 전에 먼저 실행
+  useLayoutEffect(() => {
+    const handleEmailConfirmation = async () => {
+      const hash = window.location.hash;
+      
+      // 이메일 인증 후 리다이렉트인 경우
+      if (hash && (hash.includes('access_token') || hash.includes('type=signup') || hash.includes('type=email'))) {
+        // 세션 제거
+        await supabase.auth.signOut();
+        // URL 정리
+        window.history.replaceState(null, '', window.location.pathname);
+        setMessage('이메일 인증이 완료되었습니다. 로그인해주세요.');
+        setChecking(false);
+        return;
+      }
+
+      // 일반적인 세션 체크
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && session.user.email_confirmed_at) {
+        navigate('/main');
+      }
+      setChecking(false);
+    };
+
+    handleEmailConfirmation();
+  }, [navigate]);
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">로딩 중...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
